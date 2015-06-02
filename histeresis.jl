@@ -202,7 +202,7 @@ function microEstados_aumenta_H(m::MicroEstado, num_pasos::Int)
 
     for i in 1:num_pasos-1
         H,i,j = max_energia_abajo(m,energia_minima)
-        avalancha(m,i,j,H)
+        avalancha_abajo(m,i,j,H)
         push!(edos, copy(m.σ))
     end
 
