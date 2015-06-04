@@ -1,12 +1,12 @@
 module Histeresis
 
-export MicroEstado, edo_inicial, edo_aleatorio, magnetizacion_aumenta_H!
+export MicroEstado, edo_inicial, edo_aleatorio, magnetizacion_aumenta_H!, microEstados_aumenta_H!
 
 type MicroEstado
     σ::Array{Int,2}
     h::Array{Float64,2}
-    #Vamos a suponer que todas las configuraciones son cuadradas
-    L::Int
+    L::Int # La longitud del cuadro de espines
+	N::Int # El númeto total de espines
 end
 
 import Base.show
@@ -21,7 +21,7 @@ function edo_inicial(L::Int, R, espin::Int)
         h[i] = R*randn()
     end
 
-    MicroEstado(σ, h, L)
+    MicroEstado(σ, h, L, L^2)
 end
 
 function edo_aleatorio(L::Int, R)
@@ -32,7 +32,7 @@ function edo_aleatorio(L::Int, R)
         h[i] = R*randn()
     end
 
-    MicroEstado(σ, h, L)
+    MicroEstado(σ, h, L, L^2)
 end
 
 function criterio_espin(m::MicroEstado, i::Int, j::Int)
@@ -79,7 +79,7 @@ end
 
 function avalancha_abajo!(m::MicroEstado, i::Int, j::Int, H::Float64, espin::Int)
     voltea_espin!(m,i,j)
-    espines_volteados = [(i,j)]
+    num_volteados = 1
 
     candidatos = espines_vecinos_abajo(m,i,j,espin)
 
@@ -90,7 +90,7 @@ function avalancha_abajo!(m::MicroEstado, i::Int, j::Int, H::Float64, espin::Int
             if m.σ[k...] == espin
                 if  -espin*(criterio_espin(m,k...) + H) > 0
                     voltea_espin!(m,k...)
-                    push!(espines_volteados,k)
+                    num_volteados += 1
                     nuevos_candidatos = vcat(nuevos_candidatos, espines_vecinos_abajo(m,k...,espin))
                 end
             end
@@ -99,42 +99,51 @@ function avalancha_abajo!(m::MicroEstado, i::Int, j::Int, H::Float64, espin::Int
         candidatos = nuevos_candidatos
     end
 
-    m, espines_volteados
+    m, num_volteados
 end
 
 magnetizacion(m::MicroEstado) = sum(m.σ)
 
 function magnetizacion_aumenta_H!(m::MicroEstado, H_set, espin::Int)
     valor_min = -(maximum(abs(m.h)))-5
-    N = m.L^2
     mag = [magnetizacion(m)]
 
     H,i,j = max_abajo(m, valor_min, espin)
     hs = [H]
 
-    while -espin*(hs[end] - H_set) < 0 && mag[end] != -espin*N
+	volteados = Int[]
+
+    while -espin*(hs[end] - H_set) < 0 && mag[end] != -espin*m.N
         push!(hs, H)
-        m, volteados = avalancha_abajo!(m,i,j,H, espin)
-        ΔM = -2espin*length(volteados)
+        m, num_volteados = avalancha_abajo!(m,i,j,H, espin)
+        ΔM = -2espin*num_volteados
         push!(mag, mag[end] + ΔM)
+		push!(volteados, num_volteados)
         H,i,j = max_abajo(m, valor_min, espin)
     end
 
-    mag, hs
+    mag, hs, volteados
 end
 
-# function microEstados_aumenta_H(m::MicroEstado, num_pasos::Int)
-#     energia_minima = minimum(m.h)-5
-#     edos = Array{Int,2}[copy(m.σ)] #Si no se hace ésto, nada más se copia el apuntador
-#     sizehint(edos, num_pasos)
+function microEstados_aumenta_H!(m::MicroEstado, H_set, espin::Int)
+    valor_min = -(maximum(abs(m.h)))-5
+	mag = [magnetizacion(m)]
 
-#     for i in 1:num_pasos-1
-#         H,i,j = max_energia_abajo(m,energia_minima)
-#         avalancha_abajo(m,i,j,H)
-#         push!(edos, copy(m.σ))
-#     end
+	H,i,j = max_abajo(m, valor_min, espin)
+	hs = [H]
 
-#     edos
-# end
+	edos = Array{Int,2}[copy(m.σ)] #Si no se hace ésto, nada más se copia el apuntador
+
+    while -espin*(hs[end] - H_set) < 0 && mag[end] != -espin*m.N
+        push!(hs, H)
+        m, num_volteados = avalancha_abajo!(m,i,j,H, espin)
+        ΔM = -2espin*num_volteados
+        push!(mag, mag[end] + ΔM)
+        push!(edos, copy(m.σ))
+		H,i,j = max_abajo(m, valor_min, espin)
+    end
+
+    edos
+end
 
 end
